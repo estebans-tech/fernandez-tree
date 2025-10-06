@@ -3,10 +3,15 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte'
 import type { Config } from '@sveltejs/kit'
 
 const config: Config = {
-  // enables postcss, scss, md transforms handled by Vite
   preprocess: vitePreprocess(),
   kit: {
-    adapter: adapter()
+    adapter: adapter(),
+    alias: {
+      $types: 'src/lib/types',
+      $utils: 'src/lib/utils',
+      $constants: 'src/lib/constants',
+      $components: 'src/lib/components'
+    }
   }
 }
 
