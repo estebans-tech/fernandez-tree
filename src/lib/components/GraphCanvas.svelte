@@ -131,7 +131,7 @@
             <line x1={sx} y1={sy} x2={tx} y2={ty}
               stroke={e.type === 'spouse' ? '#999' : '#666'}
               stroke-dasharray={e.type === 'spouse' ? '6 6' : '0'}
-              stroke-width="2"
+              stroke-width="1"
               marker-end={e.type === 'parent' ? 'url(#arrow)' : undefined} />
           {/if}
         {/each}
@@ -139,7 +139,7 @@
         {#each graph.nodes as n}
           <g transform={`translate(${n.x - nodeSize.w / 2},${n.y - nodeSize.h / 2})`}>
             <rect width={nodeSize.w} height={nodeSize.h} rx={nodeSize.rx} fill="#fff" stroke="#333" />
-            <text x={nodeSize.w / 2} y={nodeSize.h / 2 + 4} text-anchor="middle" font-family="system-ui, sans-serif" font-size="12">
+            <text x={nodeSize.w / 2} y={nodeSize.h / 2 + 4} text-anchor="middle" font-family="system-ui, sans-serif" font-size="11">
               {n.label}
             </text>
           </g>
