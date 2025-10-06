@@ -1,6 +1,7 @@
 <script lang="ts">
   import GraphCanvas from '$lib/components/GraphCanvas.svelte'
-  import { parseDsl, layoutSimple, loadLS, saveLS, debounce } from '$lib/utils'
+  import { parseDsl, layoutWithHubs, loadLS, saveLS, debounce } from '$lib/utils'
+
   import { onMount } from 'svelte'
 
   const LS_KEY = 'family-dsl'
@@ -25,7 +26,7 @@ dsl = defaultDsl
   const saveDebounced = debounce((value: string) => saveLS(LS_KEY, value), 300)
 
   // live parse + layout
-  $: parsed = layoutSimple(parseDsl(dsl))
+  $: parsed = layoutWithHubs(parseDsl(dsl))
 </script>
   
 <svelte:head>
