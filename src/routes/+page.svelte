@@ -1,9 +1,6 @@
 <script lang="ts">
   import GraphCanvas from '$lib/components/GraphCanvas.svelte'
-  import { parseDsl } from '$lib/utils/parseDsl'
-  import { layoutSimple } from '$lib/utils/layoutSimple'
-  import { loadLS, saveLS } from '$lib/utils/storage'
-  import { debounce } from '$lib/utils/debounce'
+  import { parseDsl, layoutSimple, loadLS, saveLS, debounce } from '$lib/utils'
   import { onMount } from 'svelte'
 
   const LS_KEY = 'family-dsl'
