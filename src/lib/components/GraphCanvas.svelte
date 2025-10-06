@@ -22,7 +22,12 @@
       graph.nodes.forEach(n => nodeById.set(n.id, n))
     }
   
+    const hasNodes = () => !!graph?.nodes?.length
+
     const worldBBox = () => {
+      // fallback bbox when there are no nodes yet
+      if (!hasNodes()) return { x: -width / 2, y: -height / 2, width, height }
+
       const xs = graph.nodes.map(n => n.x)
       const ys = graph.nodes.map(n => n.y)
       const minx = Math.min(...xs) - nodeSize.w * 0.5
@@ -38,6 +43,8 @@
     })
   
     const onWheel = (e: WheelEvent) => {
+      // if we have no content, ignore zoom to avoid NaNs
+      if (!hasNodes()) return
       e.preventDefault()
       const rect = svgEl.getBoundingClientRect()
       const cx = e.clientX - rect.left
@@ -68,6 +75,10 @@
     }
   
     const fit = () => {
+      if (!hasNodes()) {
+        t = { x: 0, y: 0, k: 1 }
+        return
+      }
       const bbox = worldBBox()
       t = fitTo(bbox, { width, height }, 60)
     }
