@@ -3,7 +3,8 @@
     import { onMount } from 'svelte'
     import type { Graph, Transform, Node } from '$types/graph'
     import { zoomAt, fitTo } from '$lib/utils/viewport'
-  
+    import { elbowPath } from '$lib/utils'
+
     export let graph: Graph
     export let width = 960
     export let height = 600
@@ -16,12 +17,44 @@
   
     const nodeSize = { w: 90, h: 36, rx: 8 }
   
+    // quick lookups
     const nodeById = new Map<string, Node>()
     $: {
       nodeById.clear()
       graph.nodes.forEach(n => nodeById.set(n.id, n))
     }
-  
+
+    // build spouse set for quick checks (undirected)
+    const spouseKey = (a: string, b: string) => a < b ? `${a}|${b}` : `${b}|${a}`
+    let spousePairs = new Set<string>()
+    $: {
+      spousePairs = new Set()
+      for (const e of graph.edges) if (e.type === 'spouse') {
+        spousePairs.add(spouseKey(e.from, e.to))
+      }
+    }
+
+    // compute children -> parents map
+    let parentsOf = new Map<string, string[]>()
+    $: {
+      parentsOf = new Map()
+      for (const e of graph.edges) if (e.type === 'parent') {
+        const arr = parentsOf.get(e.to) ?? []
+        if (!arr.includes(e.from)) arr.push(e.from)
+        parentsOf.set(e.to, arr)
+      }
+    }
+
+    // children that qualify for a couple hub
+    let hubChildren = new Map<string, { p1: string, p2: string }>()
+    $: {
+      hubChildren = new Map()
+      for (const [child, ps] of parentsOf) {
+        if (ps.length === 2 && spousePairs.has(spouseKey(ps[0], ps[1]))) {
+          hubChildren.set(child, { p1: ps[0], p2: ps[1] })
+        }
+      }
+    }
     const hasNodes = () => !!graph?.nodes?.length
 
     const worldBBox = () => {
@@ -130,27 +163,52 @@
         </marker>
       </defs>
   
-      <g transform={`translate(${t.x},${t.y}) scale(${t.k})`}>
-        {#each graph.edges as e}
+      <g transform={`translate(${Number.isFinite(t.x) ? t.x : 0},${Number.isFinite(t.y) ? t.y : 0}) scale(${Number.isFinite(t.k) && t.k > 0 ? t.k : 1})`}>
+
+        {#each graph.edges.filter(e => e.type === 'spouse') as e}
           {#if nodeById.get(e.from) && nodeById.get(e.to)}
             {@const a = nodeById.get(e.from)}
             {@const b = nodeById.get(e.to)}
-            {@const sx = a.x}
-            {@const sy = a.y + (e.type === 'parent' ? nodeSize.h * 0.5 : 0)}
-            {@const tx = b.x}
-            {@const ty = b.y - (e.type === 'parent' ? nodeSize.h * 0.5 : 0)}
-            <line x1={sx} y1={sy} x2={tx} y2={ty}
-              stroke={e.type === 'spouse' ? '#999' : '#666'}
-              stroke-dasharray={e.type === 'spouse' ? '6 6' : '0'}
-              stroke-width="1"
-              marker-end={e.type === 'parent' ? 'url(#arrow)' : undefined} />
+            <line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+              stroke="#999" stroke-dasharray="6 6" stroke-width="1" />
           {/if}
         {/each}
-  
+      
+        {#each graph.nodes as child}
+          {#if hubChildren.has(child.id)}
+            {@const pair = hubChildren.get(child.id)}
+            {@const A = nodeById.get(pair.p1)}
+            {@const B = nodeById.get(pair.p2)}
+            {#if A && B}
+              {@const hx = (A.x + B.x) * 0.5}
+              {@const hy = (A.y + B.y) * 0.5}
+              {@const path = elbowPath(hx, hy + 18, child.x, child.y - 18)}
+              <path d={path} fill="none" stroke="#666" stroke-width="1.2" marker-end="url(#arrow)" />
+            {/if}
+          {/if}
+        {/each}
+      
+        {#each graph.edges.filter(e => e.type === 'parent') as e}
+          {#if nodeById.get(e.from) && nodeById.get(e.to)}
+            {@const a = nodeById.get(e.from)}
+            {@const b = nodeById.get(e.to)}
+      
+            {#if !hubChildren.has(e.to)}
+              {@const sx = a.x}
+              {@const sy = a.y + 18}
+              {@const tx = b.x}
+              {@const ty = b.y - 18}
+              {@const path = elbowPath(sx, sy, tx, ty)}
+              <path d={path} fill="none" stroke="#666" stroke-width="1.2" marker-end="url(#arrow)" />
+            {/if}
+          {/if}
+        {/each}
+      
+        <!-- nodes as before -->
         {#each graph.nodes as n}
           <g transform={`translate(${n.x - nodeSize.w / 2},${n.y - nodeSize.h / 2})`}>
             <rect width={nodeSize.w} height={nodeSize.h} rx={nodeSize.rx} fill="#fff" stroke="#333" />
-            <text x={nodeSize.w / 2} y={nodeSize.h / 2 + 4} text-anchor="middle" font-family="system-ui, sans-serif" font-size="11">
+            <text x={nodeSize.w / 2} y={nodeSize.h / 2 + 4} text-anchor="middle" font-family="system-ui, sans-serif" font-size="12">
               {n.label}
             </text>
           </g>
