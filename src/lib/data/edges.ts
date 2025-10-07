@@ -7,8 +7,8 @@ import { PARENT_MIN_AGE_GAP, WARN_IF_PARENT_YOUNGER_OR_EQUAL } from '$lib/consta
 
 import type { NodeRegistry } from '$lib/types/nodes'
 import type { Attrs } from '$lib/types/domain'
-import { parseNodeToken } from '$lib/data/nodes'
-
+import { parseNodeToken, extractLabelAndAttrs } from '$lib/data/nodes'
+import { toIdBase } from '$lib/utils/strings'
 // ---------------------------------------------------------------------
 // Core edge helpers
 // ---------------------------------------------------------------------
@@ -115,6 +115,7 @@ export function parseEdgesFromDsl(
 ): { edges: EdgeSet, findings: Finding[] } {
   const strictMode = !!opts.strictMode
   const createMissing = opts.createMissingNodes ?? true
+
   const edges = createEmptyEdgeSet()
   const findings: Finding[] = []
 
@@ -135,77 +136,43 @@ export function parseEdgesFromDsl(
 
     // multiple '>' → error, skip line
     if (arrows > 1) {
-      findings.push({
-        severity: 'ERROR',
-        code: 'E103',
-        message: `Multiple '>' in one line is not allowed`,
-        line: lineNo
-      })
+      findings.push({ severity: 'ERROR', code: 'E103', message: `Multiple '>' in one line is not allowed`, line: lineNo })
       continue
     }
 
-    // spouse line (A=B) at top-level
+    // spouse-only line (A=B) at top-level
     if (arrows === 0 && /=/.test(masked)) {
       const eqTop = topLevelEqualsCount(masked)
       if (eqTop !== 1) {
-        findings.push({
-          severity: 'ERROR',
-          code: 'E102',
-          message: `Invalid spouse syntax on line`,
-          line: lineNo
-        })
+        findings.push({ severity: 'ERROR', code: 'E102', message: `Invalid spouse syntax on line`, line: lineNo })
         continue
       }
 
       const [aTok, bTok] = masked.split('=').map(s => s.trim()).map(t => t.replace(/§/g, ','))
       if (!aTok || !bTok) {
-        findings.push({
-          severity: 'ERROR',
-          code: 'E102',
-          message: `Empty person token in spouse expression`,
-          line: lineNo
-        })
+        findings.push({ severity: 'ERROR', code: 'E102', message: `Empty person token in spouse expression`, line: lineNo })
         continue
       }
 
-      // resolve both sides
       const ar = parseNodeToken(aTok, registry, 'resolve', lineNo)
-      findings.push(...ar.findings)
       const br = parseNodeToken(bTok, registry, 'resolve', lineNo)
-      findings.push(...br.findings)
+      findings.push(...ar.findings, ...br.findings)
 
       const aAmb = isAmbiguous(ar.findings)
       const bAmb = isAmbiguous(br.findings)
 
-      if (!ar.node && !aAmb) {
-        const ac = parseNodeToken(aTok, registry, 'create', lineNo)
-        findings.push(...ac.findings)
-      }
-      if (!br.node && !bAmb) {
-        const bc = parseNodeToken(bTok, registry, 'create', lineNo)
-        findings.push(...bc.findings)
-      }
+      if (!ar.node && !aAmb) findings.push(...parseNodeToken(aTok, registry, 'create', lineNo).findings)
+      if (!br.node && !bAmb) findings.push(...parseNodeToken(bTok, registry, 'create', lineNo).findings)
 
       const aId = resolveIdForLabel(aTok, registry)
       const bId = resolveIdForLabel(bTok, registry)
 
       if (aAmb || bAmb || !aId || !bId) {
-        findings.push({
-          severity: 'ERROR',
-          code: 'E102',
-          message: `Ambiguous or unresolved spouse token(s)`,
-          line: lineNo
-        })
+        findings.push({ severity: 'ERROR', code: 'E102', message: `Ambiguous or unresolved spouse token(s)`, line: lineNo })
         continue
       }
-
       if (aId === bId) {
-        findings.push({
-          severity: 'WARN',
-          code: 'W102',
-          message: `Self-spouse edge ignored`,
-          line: lineNo
-        })
+        findings.push({ severity: 'WARN', code: 'W102', message: `Self-spouse edge ignored`, line: lineNo })
         continue
       }
 
@@ -217,96 +184,76 @@ export function parseEdgesFromDsl(
     if (arrows === 1) {
       const [left, right] = masked.split('>')
       const parentTokens = splitTokens(left).map(t => t.replace(/§/g, ','))
-      const childTokens = splitTokens(right).map(t => t.replace(/§/g, ','))
+      const childTokens  = splitTokens(right).map(t => t.replace(/§/g, ','))
 
       if (parentTokens.length === 0 || childTokens.length === 0) {
-        findings.push({
-          severity: 'ERROR',
-          code: 'E104',
-          message: `Empty parent or child side`,
-          line: lineNo
-        })
+        findings.push({ severity: 'ERROR', code: 'E104', message: `Empty parent or child side`, line: lineNo })
         continue
       }
 
       // resolve/create parents
       const parentIds: Array<{ id: string | null, ambiguous: boolean, tok: string }> = []
+      let lineHasAmbiguity = false
+
       for (const tok of parentTokens) {
         const r = parseNodeToken(tok, registry, 'resolve', lineNo)
         findings.push(...r.findings)
 
         const amb = isAmbiguous(r.findings)
         if (createMissing && !r.node && !amb) {
-          const c = parseNodeToken(tok, registry, 'create', lineNo)
-          findings.push(...c.findings)
+          findings.push(...parseNodeToken(tok, registry, 'create', lineNo).findings)
         }
 
         const id = amb ? null : resolveIdForLabel(tok, registry)
         parentIds.push({ id, ambiguous: amb, tok })
         if (amb) {
-          findings.push({
-            severity: 'ERROR',
-            code: 'E101',
-            message: `Ambiguous parent token '${tok}'`,
-            line: lineNo
-          })
+          lineHasAmbiguity = true
+          findings.push({ severity: 'ERROR', code: 'E101', message: `Ambiguous parent token '${tok}'`, line: lineNo })
         }
       }
 
-      // children: always create
+      // resolve/create children
       const childIds: string[] = []
       for (const tok of childTokens) {
         if (createMissing) {
-          const c = parseNodeToken(tok, registry, 'create', lineNo)
-          findings.push(...c.findings)
-          const id = resolveIdForLabel(tok, registry)
-          if (id) childIds.push(id)
-        } else {
-          const id = resolveIdForLabel(tok, registry)
-          if (id) childIds.push(id)
+          findings.push(...parseNodeToken(tok, registry, 'create', lineNo).findings)
         }
+        const id = resolveIdForLabel(tok, registry)
+        if (id) childIds.push(id)
       }
 
-      // optional spouse between first two non-ambiguous parents
+      // strict mode: ambiguity on line → skip edges from this line
+      if (strictMode && lineHasAmbiguity) {
+        findings.push({ severity: 'ERROR', code: 'E101', message: `Ambiguous token(s) on this line — skipped`, line: lineNo })
+        continue
+      }
+
+      // spouse between first two resolved parents (if distinct)
       const firstTwo = parentIds.filter(p => !!p.id).slice(0, 2)
       if (firstTwo.length >= 2) {
         const a = firstTwo[0].id!, b = firstTwo[1].id!
         if (a !== b) {
           insertEdge(edges, { type: 'spouse', from: a, to: b, meta: { line: lineNo } }, findings)
         } else {
-          findings.push({
-            severity: 'WARN',
-            code: 'W102',
-            message: `Self-spouse edge ignored`,
-            line: lineNo
-          })
+          findings.push({ severity: 'WARN', code: 'W102', message: `Self-spouse edge ignored`, line: lineNo })
         }
       }
 
-      // parent edges: from each resolvable parent to each child
+      // parent→child for all combinations
       for (const p of parentIds) {
-        if (!p.id) {
-          if (strictMode) break
-          else continue
-        }
+        if (!p.id) { if (strictMode) break; else continue }
         for (const cId of childIds) {
           if (p.id === cId) {
-            findings.push({
-              severity: 'WARN',
-              code: 'W103',
-              message: `Self-parent edge ignored`,
-              line: lineNo
-            })
+            findings.push({ severity: 'WARN', code: 'W103', message: `Self-parent edge ignored`, line: lineNo })
             continue
           }
-
           insertEdge(edges, { type: 'parent', from: p.id, to: cId, meta: { line: lineNo } }, findings)
 
-          // age sanity check
+          // age sanity
           const pb = getBirth(registry, p.id)
           const cb = getBirth(registry, cId)
-          const ageFinding = assessParentAge(pb, cb)
-          if (ageFinding) findings.push({ ...ageFinding, line: lineNo })
+          const warn = assessParentAge(pb, cb)
+          if (warn) findings.push({ ...warn, line: lineNo })
         }
       }
 
@@ -318,7 +265,6 @@ export function parseEdgesFromDsl(
 
   return { edges, findings }
 }
-
 // ---------------------------------------------------------------------
 // Local helpers (not exported)
 // ---------------------------------------------------------------------
@@ -341,18 +287,27 @@ function isAmbiguous(finds: Finding[]): boolean {
   return finds.some(f => f.code === 'W001' && (f as any).contextIdCandidates && (f as any).contextIdCandidates.length > 1)
 }
 
-// best-effort: lookup an id for a token's label in the registry
-function resolveIdForLabel(token: string, reg: NodeRegistry): string | null {
-  const ex = extractLabelOnly(token)
-  const base = ex
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, '_')
-  for (const id of reg.byId.keys()) {
-    if (id.startsWith(base + '_')) return id
+// Resolves a DSL token to a single node id *if and only if* it maps uniquely in the registry.
+// - Uses SAME parsing & id-base as node creation (diacritics preserved).
+// - With birth year → matches bucket.byYear[year] when length===1
+// - Without year  → matches exactly one in noYearIds, else null
+function resolveIdForLabel(raw: string, reg: NodeRegistry): string | null {
+  const ex = extractLabelAndAttrs(raw)
+  // if token itself was erroneous, give up
+  if (ex.findings.some(f => f.severity === 'ERROR')) return null
+
+  const base = toIdBase(ex.label)
+  const b = typeof ex.attrs.b === 'number' ? ex.attrs.b : null
+  const bucket = reg.byBase.get(base)
+  if (!bucket) return null
+
+  if (b != null) {
+    const list = bucket.byYear.get(b) || []
+    return list.length === 1 ? list[0] : null
+  } else {
+    const list = bucket.noYearIds
+    return list.length === 1 ? list[0] : null
   }
-  return null
 }
 
 function extractLabelOnly(personToken: string): string {

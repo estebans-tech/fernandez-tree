@@ -28,6 +28,7 @@
 .btn-outline {
     @apply border border-gray-300 bg-transparent hover:bg-black/5;
 }
+
 .btn-ghost   {
     @apply border-transparent bg-transparent hover:bg-black/5;
 }
@@ -41,7 +42,6 @@
     text-xs
     rounded-lg;
 }
-
 .btn-normal  {
     @apply h-11 px-4
     text-sm

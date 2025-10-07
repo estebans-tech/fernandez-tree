@@ -3,6 +3,7 @@
   import Findings from '$lib/components/Findings.svelte'
   import NodesTable from '$lib/components/NodesTable.svelte'
   import EdgesTable from '$lib/components/EdgesTable.svelte'
+  import GraphCanvas from '$lib/components/GraphCanvas.svelte'
 
   import {
     createEmptyRegistry,
@@ -30,6 +31,8 @@ Göte Fehrm Hansson+Hilda Svansson[1988]>Samantha Fehrm Svansson[2010]
   let findings = $state<Finding[]>([])
   let edgesCount = $state(0)
   let edgesList = $state([] as { id:string, type:'parent'|'spouse', from:string, to:string, meta?:{line?:number} }[])
+  let vizNodes = $state([] as { id:string, label:string, x:number, y:number }[])
+  let vizEdges = $state([] as { type:'parent'|'spouse', from:string, to:string }[])
 
   // save to localStorage (debounced) whenever dsl changes
   const saveDebounced = debounce((v: string) => saveLS(LS_KEY, v), 300)
@@ -77,6 +80,31 @@ Göte Fehrm Hansson+Hilda Svansson[1988]>Samantha Fehrm Svansson[2010]
     edgesCount = edges.list.length
     edgesList = edges.list
     findings = [...newFindings, ...edgeFinds]
+
+    // --- layout for canvas (toy grid) ---
+    const rawNodes = Array.from(newReg.byId.values())
+    rawNodes.sort((a, b) => {
+      const ab = typeof a.attrs?.b === 'number' ? a.attrs.b : 9999
+      const bb = typeof b.attrs?.b === 'number' ? b.attrs.b : 9999
+      return ab - bb || a.label.localeCompare(b.label)
+    })
+
+    const COLS = 6, GAPX = 40, GAPY = 60, W = 120, H = 36
+    const offX = 24, offY = 16
+    const laid = rawNodes.map((n, i) => {
+      const col = i % COLS
+      const row = Math.floor(i / COLS)
+      return {
+        id: n.id,
+        label: n.label,
+        x: offX + col * (W + GAPX),
+        y: offY + row * (H + GAPY)
+      }
+    })
+    vizNodes = laid
+
+    // edges for canvas
+    vizEdges = edges.list.map(e => ({ type: e.type, from: e.from, to: e.to }))
   })
 
   // derived for table
@@ -185,8 +213,10 @@ Göte Fehrm Hansson+Hilda Svansson[1988]>Samantha Fehrm Svansson[2010]
         Edges {edgesCount}
       </span>
     </div>
-    <NodesTable nodes={nodes} />
+
+    <GraphCanvas nodes={vizNodes} edges={vizEdges} width={1000} height={520} />
     <EdgesTable edges={edgesList} />
+    <NodesTable nodes={nodes} />
     <Findings findings={findings} />
   </div>
 </div>

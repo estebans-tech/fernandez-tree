@@ -17,7 +17,7 @@ export function createEmptyRegistry(): NodeRegistry {
   }
 }
 
-function ensureBase(reg: NodeRegistry, base: string) {
+export function ensureBase(reg: NodeRegistry, base: string) {
   if (!reg.byBase.has(base)) {
     reg.byBase.set(base, {
       byYear: new Map<number, string[]>(),
