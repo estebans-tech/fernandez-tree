@@ -1,5 +1,5 @@
 <script lang="ts">
-  import GraphCanvas from '$lib/components/GraphCanvas.svelte'
+  import GraphCanvasLegacy from '$lib/components/GraphCanvasLegacy.svelte'
   import { parseDsl, layoutWithHubs, loadLS, saveLS, debounce } from '$lib/utils'
   import { onMount } from 'svelte'
   import { LS_KEY } from '$lib/constants'
@@ -48,6 +48,6 @@ Este+Kat[b=1976]>Em[b=2011]`
   </div>
 
   <div>
-    <GraphCanvas graph={parsed} width={1000} height={640} />
+    <GraphCanvasLegacy graph={parsed} width={1000} height={640} />
   </div>
 </div>

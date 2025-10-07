@@ -191,6 +191,7 @@ Göte Fehrm Hansson+Hilda Svansson[1988]>Samantha Fehrm Svansson[2010]
 
     <textarea
       bind:value={dsl}
+      id="tree"
       class="w-full h-60 font-mono text-[13px] leading-snug p-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
     ></textarea>
 
