@@ -169,8 +169,11 @@
           {#if nodeById.get(e.from) && nodeById.get(e.to)}
             {@const a = nodeById.get(e.from)}
             {@const b = nodeById.get(e.to)}
+            {@const sameRow = Math.abs(a.y - b.y) < 1}  <!-- proxy för "samma generation" -->
             <line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-              stroke="#999" stroke-dasharray="6 6" stroke-width="1" />
+              stroke={sameRow ? '#999' : '#bbb'}
+              stroke-dasharray="6 6"
+              stroke-width={sameRow ? '1' : '0.8'} />
           {/if}
         {/each}
       
