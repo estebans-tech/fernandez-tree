@@ -2,7 +2,8 @@
   // Node-only playground (no edges). Svelte 5 runes.
   import Findings from '$lib/components/Findings.svelte'
   import NodesTable from '$lib/components/NodesTable.svelte'
-  
+  import EdgesTable from '$lib/components/EdgesTable.svelte'
+
   import {
     createEmptyRegistry,
     extractLabelAndAttrs,
@@ -28,6 +29,7 @@ Göte Fehrm Hansson+Hilda Svansson[1988]>Samantha Fehrm Svansson[2010]
   let reg = $state<NodeRegistry>(createEmptyRegistry())
   let findings = $state<Finding[]>([])
   let edgesCount = $state(0)
+  let edgesList = $state([] as { id:string, type:'parent'|'spouse', from:string, to:string, meta?:{line?:number} }[])
 
   // save to localStorage (debounced) whenever dsl changes
   const saveDebounced = debounce((v: string) => saveLS(LS_KEY, v), 300)
@@ -37,44 +39,45 @@ Göte Fehrm Hansson+Hilda Svansson[1988]>Samantha Fehrm Svansson[2010]
 
   // re-parse when dsl changes
   $effect(() => {
-  const { tokens: toks } = tokenizePersonsWithRole(dsl)
+    const { tokens: toks } = tokenizePersonsWithRole(dsl)
 
-  const newReg = createEmptyRegistry()
-  const newFindings: Finding[] = []
+    const newReg = createEmptyRegistry()
+    const newFindings: Finding[] = []
 
-  for (const tok of toks) {
-    const ex = extractLabelAndAttrs(tok.text)
-    newFindings.push(...ex.findings.map(f => ({ ...f, line: tok.line })))
+    for (const tok of toks) {
+      const ex = extractLabelAndAttrs(tok.text)
+      newFindings.push(...ex.findings.map(f => ({ ...f, line: tok.line })))
 
-    const hasError = ex.findings.some(f => f.severity === 'ERROR')
-    if (hasError) continue
+      const hasError = ex.findings.some(f => f.severity === 'ERROR')
+      if (hasError) continue
 
-    if (tok.role === 'parent') {
-      const r1 = decideId(ex.label, ex.attrs as Attrs, newReg, 'resolve')
-      newFindings.push(...r1.findings.map(f => ({ ...f, line: tok.line })))
+      if (tok.role === 'parent') {
+        const r1 = decideId(ex.label, ex.attrs as Attrs, newReg, 'resolve')
+        newFindings.push(...r1.findings.map(f => ({ ...f, line: tok.line })))
 
-      const ambiguous = r1.findings.some(f => f.code === 'W001' && (f.contextIdCandidates?.length ?? 0) > 1)
-      if (!r1.id && !ambiguous) {
-        const r2 = decideId(ex.label, ex.attrs as Attrs, newReg, 'create')
-        newFindings.push(...r2.findings.map(f => ({ ...f, line: tok.line })))
+        const ambiguous = r1.findings.some(f => f.code === 'W001' && (f.contextIdCandidates?.length ?? 0) > 1)
+        if (!r1.id && !ambiguous) {
+          const r2 = decideId(ex.label, ex.attrs as Attrs, newReg, 'create')
+          newFindings.push(...r2.findings.map(f => ({ ...f, line: tok.line })))
+        }
+      } else {
+        const r = decideId(ex.label, ex.attrs as Attrs, newReg, 'create')
+        newFindings.push(...r.findings.map(f => ({ ...f, line: tok.line })))
       }
-    } else {
-      const r = decideId(ex.label, ex.attrs as Attrs, newReg, 'create')
-      newFindings.push(...r.findings.map(f => ({ ...f, line: tok.line })))
     }
-  }
 
-  // edges – read-only, don't create nodes again
-  const { edges, findings: edgeFinds } = parseEdgesFromDsl(dsl, newReg, {
-    strictMode: false,
-    createMissingNodes: false
+    // edges – read-only, don't create nodes again
+    const { edges, findings: edgeFinds } = parseEdgesFromDsl(dsl, newReg, {
+      strictMode: false,
+      createMissingNodes: false
+    })
+
+    // single assignments — no read/modify cycles
+    reg = newReg
+    edgesCount = edges.list.length
+    edgesList = edges.list
+    findings = [...newFindings, ...edgeFinds]
   })
-
-  // single assignments — no read/modify cycles
-  reg = newReg
-  edgesCount = edges.list.length
-  findings = [...newFindings, ...edgeFinds]
-})
 
   // derived for table
   const nodes = $derived(Array.from(reg.byId.values()))
@@ -183,6 +186,7 @@ Göte Fehrm Hansson+Hilda Svansson[1988]>Samantha Fehrm Svansson[2010]
       </span>
     </div>
     <NodesTable nodes={nodes} />
+    <EdgesTable edges={edgesList} />
     <Findings findings={findings} />
   </div>
 </div>
