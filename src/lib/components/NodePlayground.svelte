@@ -2,12 +2,13 @@
   // Node-only playground (no edges). Svelte 5 runes.
   import Findings from '$lib/components/Findings.svelte'
   import NodesTable from '$lib/components/NodesTable.svelte'
-
+  
   import {
     createEmptyRegistry,
     extractLabelAndAttrs,
     decideId
   } from '$lib/data/nodes'
+  import { parseEdgesFromDsl } from '$lib/data/edges'
 
   import type { NodeRegistry } from '$lib/types/nodes'
   import type { Finding } from '$lib/types/warnings'
@@ -26,6 +27,7 @@ Göte Fehrm Hansson+Hilda Svansson[1988]>Samantha Fehrm Svansson[2010]
   let dsl = $state(SAMPLE)
   let reg = $state<NodeRegistry>(createEmptyRegistry())
   let findings = $state<Finding[]>([])
+  let edgesCount = $state(0)
 
   // save to localStorage (debounced) whenever dsl changes
   const saveDebounced = debounce((v: string) => saveLS(LS_KEY, v), 300)
@@ -35,15 +37,15 @@ Göte Fehrm Hansson+Hilda Svansson[1988]>Samantha Fehrm Svansson[2010]
 
   // re-parse when dsl changes
   $effect(() => {
-    const { tokens: toks, findings: tokFindings } = tokenizePersonsWithRole(dsl)
-    const newReg = createEmptyRegistry()
-    const newFindings: Finding[] = []
+  const { tokens: toks } = tokenizePersonsWithRole(dsl)
 
-    for (const tok of toks) {
+  const newReg = createEmptyRegistry()
+  const newFindings: Finding[] = []
+
+  for (const tok of toks) {
     const ex = extractLabelAndAttrs(tok.text)
     newFindings.push(...ex.findings.map(f => ({ ...f, line: tok.line })))
 
-    // SKIP if any ERROR from extraction
     const hasError = ex.findings.some(f => f.severity === 'ERROR')
     if (hasError) continue
 
@@ -62,9 +64,17 @@ Göte Fehrm Hansson+Hilda Svansson[1988]>Samantha Fehrm Svansson[2010]
     }
   }
 
-    reg = newReg
-    findings = newFindings
+  // edges – read-only, don't create nodes again
+  const { edges, findings: edgeFinds } = parseEdgesFromDsl(dsl, newReg, {
+    strictMode: false,
+    createMissingNodes: false
   })
+
+  // single assignments — no read/modify cycles
+  reg = newReg
+  edgesCount = edges.list.length
+  findings = [...newFindings, ...edgeFinds]
+})
 
   // derived for table
   const nodes = $derived(Array.from(reg.byId.values()))
@@ -164,6 +174,14 @@ Göte Fehrm Hansson+Hilda Svansson[1988]>Samantha Fehrm Svansson[2010]
   </div>
 
   <div class="flex flex-col gap-3">
+    <div class="flex items-center gap-3">
+      <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-slate-100">
+        Nodes {nodes.length}
+      </span>
+      <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-slate-100">
+        Edges {edgesCount}
+      </span>
+    </div>
     <NodesTable nodes={nodes} />
     <Findings findings={findings} />
   </div>
