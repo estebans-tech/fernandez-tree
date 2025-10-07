@@ -56,7 +56,7 @@
 ---
 
 ### Playground (Svelte 5 / Runes)
-- [ ] Route `/playground`
+- [x] Route `/playground`
 - [ ] Components
   - [ ] `Findings.svelte`
   - [ ] `NodesTable.svelte`
